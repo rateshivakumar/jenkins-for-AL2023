@@ -1,0 +1,90 @@
+   
+   
+   pipeline {
+    agent any
+
+    tools {
+        nodejs 'NodeJS'   // NodeJS tool configured in Jenkins
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                echo "📥 Checking out code from GitHub"
+                git branch: 'main',
+                    url: 'https://github.com/rateshivakumar/ZaltixSchool.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir('backend') {
+                    echo "📦 Installing Node.js dependencies"
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    withCredentials([string(credentialsId: 'sonar-scanner', variable: 'SONAR_TOKEN')]) {
+                        withEnv(["PATH+SONAR=${tool 'SonarQubeScanner'}/bin"]) {
+                            sh '''
+                                echo "🔎 Checking sonar-scanner version..."
+                                sonar-scanner -v
+
+                                echo "🚀 Running SonarQube analysis..."
+                                sonar-scanner \
+                                  -Dsonar.projectKey=ZaltixSchool \
+                                  -Dsonar.sources=backend \
+                                  -Dsonar.host.url=$SONAR_HOST_URL \
+                                  -Dsonar.login=$SONAR_TOKEN
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Package Node.js App') {
+            steps {
+                echo "📦 Packaging Node.js app into tar.gz"
+                sh '''
+                    cd backend
+                    tar -czf ZaltixSchool-1.0.0.tar.gz *
+                    mv ZaltixSchool-1.0.0.tar.gz ../
+                '''
+            }
+        }
+
+        stage('Upload Artifact to Nexus') {
+            steps {
+                nexusArtifactUploader(
+                    artifacts: [[
+                        artifactId: 'ZaltixSchool',
+                        classifier: '',
+                        file: 'ZaltixSchool-1.0.0.tar.gz',   // Node.js packaged tar.gz
+                        type: 'tar.gz'
+                    ]],
+                    credentialsId: 'nexus',            // Jenkins Credentials ID for Nexus
+                    groupId: 'in.zaltix.school',            // logical folder structure
+                    nexusUrl: '3.109.152.197:8081',        // your Nexus URL
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    repository: 'nodejs',                  // Nexus hosted repo name
+                    version: '1.0.0'
+                )
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline finished successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed. Check logs above."
+        }
+    }
+}
