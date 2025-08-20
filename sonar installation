@@ -1,0 +1,34 @@
+#!/bin/bash
+# =========================================
+# SonarQube 8.9 LTS Installation Script
+# For Amazon Linux 2023
+# =========================================
+
+# STEP 1: Go to /opt and download SonarQube
+cd /opt/ || exit 1
+echo "📥 Downloading SonarQube..."
+wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-8.9.6.50800.zip
+unzip sonarqube-8.9.6.50800.zip
+
+# STEP 2: Install Java 11 (required by SonarQube 8.9 LTS)
+echo "☕ Installing Java 11..."
+sudo amazon-linux-extras enable corretto11
+sudo yum install -y java-11-amazon-corretto-devel
+java -version
+
+# STEP 3: Create sonar user & set permissions
+echo "👤 Creating 'sonar' user..."
+sudo useradd -r -s /bin/false sonar
+sudo chown -R sonar:sonar /opt/sonarqube-8.9.6.50800
+sudo chmod -R 755 /opt/sonarqube-8.9.6.50800
+
+# STEP 4: Run SonarQube as the sonar user
+echo "🚀 Starting SonarQube..."
+sudo -u sonar /opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh start
+
+# STEP 5: Check status
+echo "🔎 SonarQube status:"
+sudo -u sonar /opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh status
+
+# Access SonarQube UI at http://<SERVER_PUBLIC_IP>:9000
+echo "✅ Default login: admin / admin (change password after first login)"
