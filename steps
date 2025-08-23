@@ -1,0 +1,185 @@
+Perfect 💯 — you’ve written a nice Jenkins declarative pipeline that covers Checkout → Install → SonarQube → Package → Nexus → DockerHub.
+Let’s go step by step (like you’d explain in an interview or configure in real life). I’ll break this into:
+
+Pre-requisites (Jenkins setup + external tools)
+
+Pipeline stage-by-stage explanation + configuration
+
+Where Docker fits in and what you must configure
+
+🔹 1. Pre-requisites Before Running Pipeline
+Jenkins Plugins Needed
+
+Git Plugin → for git step.
+
+NodeJS Plugin → for tools { nodejs 'NodeJS' }.
+
+SonarQube Scanner Plugin → for withSonarQubeEnv.
+
+Credentials Binding Plugin → for secrets (Sonar token, DockerHub, Nexus).
+
+Nexus Artifact Uploader Plugin → for uploading .tar.gz.
+
+Docker Pipeline Plugin → for Docker build & push.
+
+Jenkins Global Tool Configuration
+
+NodeJS installation → Manage Jenkins → Tools → NodeJS installations → Name it NodeJS.
+
+SonarQube Scanner → Manage Jenkins → Tools → SonarQube Scanner installations → Name it SonarQubeScanner.
+
+SonarQube Server → Manage Jenkins → System → SonarQube servers → Name it sonar (must match pipeline).
+
+Jenkins Credentials Setup
+
+sonar-scanner → store SonarQube token as Secret Text.
+
+nexus → store Nexus username/password as Username with password.
+
+dockerhub → store DockerHub username/password as Username with password.
+
+External Tools Setup
+
+SonarQube server running → accessible at $SONAR_HOST_URL.
+
+Nexus server running at http://3.109.152.197:8081.
+
+DockerHub account with repo rateshivakumar/zaltixschool.
+
+🔹 2. Pipeline Stage-by-Stage Explanation
+Stage 1: Checkout Code
+git branch: 'main',
+    url: 'https://github.com/rateshivakumar/ZaltixSchool.git'
+
+
+Pulls code from your GitHub repo (branch main).
+
+Jenkins needs Git plugin and access to GitHub (public repo works without creds).
+
+Stage 2: Install Dependencies
+dir('backend') {
+    sh 'npm install'
+}
+
+
+Moves into backend folder.
+
+Installs dependencies from package.json.
+
+Requires NodeJS tool configured (your tools { nodejs 'NodeJS' } automatically sets PATH).
+
+Stage 3: SonarQube Analysis
+withSonarQubeEnv('sonar') {
+  withCredentials([string(credentialsId: 'sonar-scanner', variable: 'SONAR_TOKEN')]) {
+    withEnv(["PATH+SONAR=${tool 'SonarQubeScanner'}/bin"]) {
+      sh '''
+        sonar-scanner \
+          -Dsonar.projectKey=ZaltixSchool \
+          -Dsonar.sources=backend \
+          -Dsonar.host.url=$SONAR_HOST_URL \
+          -Dsonar.login=$SONAR_TOKEN
+      '''
+    }
+  }
+}
+
+
+Connects to SonarQube server configured in Jenkins as sonar.
+
+Injects Sonar token securely.
+
+Runs sonar-scanner to analyze backend code quality & security.
+
+Stage 4: Package Node.js App
+cd backend
+tar -czf ZaltixSchool-1.0.0.tar.gz *
+mv ZaltixSchool-1.0.0.tar.gz ../
+
+
+Compresses backend app into .tar.gz.
+
+Moves artifact to root workspace (Jenkins default).
+
+Stage 5: Upload Artifact to Nexus
+nexusArtifactUploader(
+    artifacts: [[
+        artifactId: 'ZaltixSchool',
+        file: 'ZaltixSchool-1.0.0.tar.gz',
+        type: 'tar.gz'
+    ]],
+    credentialsId: 'nexus',
+    groupId: 'in.zaltix.school',
+    nexusUrl: '3.109.152.197:8081',
+    repository: 'nodejs',
+    version: '1.0.0'
+)
+
+
+Uploads artifact to Nexus Repository (nodejs).
+
+Credentials (nexus) are injected securely.
+
+Now your packaged app is stored in Nexus like Maven/Gradle artifacts.
+
+Stage 6: Build & Push Docker Image
+docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+    def app = docker.build("rateshivakumar/zaltixschool:latest")
+    app.push()
+    app.push("1.0.0")
+}
+
+
+Builds a Docker image from Dockerfile in repo root (by default).
+
+Pushes image to DockerHub under your account:
+
+latest tag
+
+1.0.0 version tag
+
+👉 Important: You must have a valid Dockerfile in your repo root (or specify path). Example for Node.js backend:
+
+# Base Image
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json & install deps
+COPY backend/package*.json ./
+RUN npm install
+
+# Copy source code
+COPY backend/ .
+
+# Expose port
+EXPOSE 8080
+
+# Start app
+CMD ["npm", "start"]
+
+🔹 3. Jenkins Commands & How to Run
+
+After saving pipeline:
+
+Start Jenkins job → Jenkins clones repo.
+
+Install dependencies → npm install.
+
+Run SonarQube → Code analysis pushed to SonarQube UI.
+
+Package app → Creates .tar.gz.
+
+Upload to Nexus → Artifact stored in http://3.109.152.197:8081/repository/nodejs/.
+
+Build Docker image → Builds Node.js backend Docker image.
+
+Push Docker image → Uploads to DockerHub (rateshivakumar/zaltixschool).
+
+✅ After successful run:
+
+SonarQube Dashboard → code quality report.
+
+Nexus Repo → .tar.gz artifact stored.
+
+DockerHub Repo → Node.js image (latest, 1.0.0).
