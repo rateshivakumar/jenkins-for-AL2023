@@ -183,3 +183,614 @@ SonarQube Dashboard → code quality report.
 Nexus Repo → .tar.gz artifact stored.
 
 DockerHub Repo → Node.js image (latest, 1.0.0).
+
+
+
+
+   1) Kubernetes manifests (put these under k8s/)
+00-namespace.yaml (optional but clean)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zaltix
+
+10-backend.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: zaltix
+  labels: { app: backend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      containers:
+        - name: backend
+          image: rateshivakumar/backend-app:1.0.0   # ← your backend image
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: zaltix
+spec:
+  selector: { app: backend }
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+
+20-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: zaltix
+  labels: { app: web-frontend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web-frontend }
+  template:
+    metadata:
+      labels: { app: web-frontend }
+    spec:
+      containers:
+        - name: web
+          image: rateshivakumar/web-app:1.0.0       # ← your web image
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend-service
+  namespace: zaltix
+spec:
+  selector: { app: web-frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP        # Use Ingress (recommended). For NodePort swap to NodePort.
+
+21-mobile.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-frontend
+  namespace: zaltix
+  labels: { app: mobile-frontend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: mobile-frontend }
+  template:
+    metadata:
+      labels: { app: mobile-frontend }
+    spec:
+      containers:
+        - name: mobile
+          image: rateshivakumar/mobile-app:1.0.0    # ← your mobile image
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-frontend-service
+  namespace: zaltix
+spec:
+  selector: { app: mobile-frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP        # Use Ingress (recommended). For NodePort swap to NodePort.
+
+90-ingress.yaml (single domain for all 3)
+
+Requires an ingress controller (NGINX). If your backend expects paths without /api, enable rewrite (shown below).
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zaltix-ingress
+  namespace: zaltix
+  annotations:
+    # If your backend DOES NOT expect the /api prefix, enable regex & rewrite:
+    # nginx.ingress.kubernetes.io/use-regex: "true"
+    # nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - host: zaltix.example.com      # ← replace with your domain
+      http:
+        paths:
+          - path: /web
+            pathType: Prefix
+            backend:
+              service:
+                name: web-frontend-service
+                port:
+                  number: 80
+          - path: /mobile
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile-frontend-service
+                port:
+                  number: 80
+          # Option A: backend expects /api prefix → no rewrite needed
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 80
+
+          # Option B: backend root (/) with rewrite (uncomment annotations above + replace this block)
+          # - path: /api(/|$)(.*)
+          #   pathType: Prefix
+          #   backend:
+          #     service:
+          #       name: backend-service
+          #       port:
+          #         number: 80
+
+
+Prefer Ingress. If you really want NodePort instead, change both frontend services to:
+
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30001  # web (optional explicit)
+
+
+and similarly for mobile (e.g., 30002). Then access via http://<node-ip>:nodePort.
+
+2) Apply once (manually)
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/10-backend.yaml
+kubectl apply -f k8s/20-web.yaml
+kubectl apply -f k8s/21-mobile.yaml
+kubectl apply -f k8s/90-ingress.yaml
+kubectl get pods -n zaltix
+kubectl get svc -n zaltix
+kubectl get ingress -n zaltix
+
+
+If you don’t have an ingress controller yet:
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+
+
+Point DNS zaltix.example.com to your ingress controller’s public IP.
+
+3) Jenkins – add build/push of web & mobile + deploy
+
+A. Make sure you have:
+
+DockerHub creds: dockerhub
+
+(Optional) Kubeconfig credential: kubeconfig (Secret file)
+
+kubectl installed on the Jenkins agent
+
+B. Add stages (snippet you can merge at the end of your current pipeline):
+
+environment {
+  APP_VERSION     = "1.0.0"
+  DOCKERHUB_USER  = "rateshivakumar"
+}
+
+stage('Build & Push Web Image') {
+  steps {
+    dir('frontend/web') {
+      sh 'npm ci || npm install'
+      sh 'npm run build'
+    }
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/web-app:${APP_VERSION} frontend/web
+          docker tag ${DOCKERHUB_USER}/web-app:${APP_VERSION} ${DOCKERHUB_USER}/web-app:latest
+          docker push ${DOCKERHUB_USER}/web-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/web-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Build & Push Mobile Image') {
+  steps {
+    dir('frontend/mobile') {
+      sh 'npm ci || npm install'
+      sh 'npm run build'
+    }
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/mobile-app:${APP_VERSION} frontend/mobile
+          docker tag ${DOCKERHUB_USER}/mobile-app:${APP_VERSION} ${DOCKERHUB_USER}/mobile-app:latest
+          docker push ${DOCKERHUB_USER}/mobile-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/mobile-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Build & Push Backend Image') {
+  steps {
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/backend-app:${APP_VERSION} backend
+          docker tag ${DOCKERHUB_USER}/backend-app:${APP_VERSION} ${DOCKERHUB_USER}/backend-app:latest
+          docker push ${DOCKERHUB_USER}/backend-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/backend-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Deploy to Kubernetes') {
+  steps {
+    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+      sh '''
+        kubectl apply -f k8s/00-namespace.yaml
+        kubectl apply -f k8s/10-backend.yaml
+        kubectl apply -f k8s/20-web.yaml
+        kubectl apply -f k8s/21-mobile.yaml
+        kubectl apply -f k8s/90-ingress.yaml
+        kubectl -n zaltix rollout status deploy/backend
+        kubectl -n zaltix rollout status deploy/web-frontend
+        kubectl -n zaltix rollout status deploy/mobile-frontend
+      '''
+    }
+  }
+}
+
+
+If you want to auto-bump image tags each run, set APP_VERSION from a build param or Git commit SHA and update the YAMLs with sed before applying:
+
+sh "sed -i 's/backend-app:1.0.0/backend-app:${APP_VERSION}/' k8s/10-backend.yaml"
+sh "sed -i 's/web-app:1.0.0/web-app:${APP_VERSION}/' k8s/20-web.yaml"
+sh "sed -i 's/mobile-app:1.0.0/mobile-app:${APP_VERSION}/' k8s/21-mobile.yaml"
+
+How your frontends call backend
+
+If you use Ingress: frontends can call /api/... (same host), avoiding CORS.
+
+If you skip Ingress: set your frontend API_BASE_URL to http://backend-service.zaltix.svc.cluster.local (internal), or expose backend as NodePort and use http://<node-ip>:<port>.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
+   
+   
+   
+      1) Kubernetes manifests (put these under k8s/)
+00-namespace.yaml (optional but clean)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zaltix
+
+10-backend.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: zaltix
+  labels: { app: backend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      containers:
+        - name: backend
+          image: rateshivakumar/backend-app:1.0.0   # ← your backend image
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: zaltix
+spec:
+  selector: { app: backend }
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+
+20-web.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: zaltix
+  labels: { app: web-frontend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web-frontend }
+  template:
+    metadata:
+      labels: { app: web-frontend }
+    spec:
+      containers:
+        - name: web
+          image: rateshivakumar/web-app:1.0.0       # ← your web image
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend-service
+  namespace: zaltix
+spec:
+  selector: { app: web-frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP        # Use Ingress (recommended). For NodePort swap to NodePort.
+
+21-mobile.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-frontend
+  namespace: zaltix
+  labels: { app: mobile-frontend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: mobile-frontend }
+  template:
+    metadata:
+      labels: { app: mobile-frontend }
+    spec:
+      containers:
+        - name: mobile
+          image: rateshivakumar/mobile-app:1.0.0    # ← your mobile image
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-frontend-service
+  namespace: zaltix
+spec:
+  selector: { app: mobile-frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP        # Use Ingress (recommended). For NodePort swap to NodePort.
+
+90-ingress.yaml (single domain for all 3)
+
+Requires an ingress controller (NGINX). If your backend expects paths without /api, enable rewrite (shown below).
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zaltix-ingress
+  namespace: zaltix
+  annotations:
+    # If your backend DOES NOT expect the /api prefix, enable regex & rewrite:
+    # nginx.ingress.kubernetes.io/use-regex: "true"
+    # nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - host: zaltix.example.com      # ← replace with your domain
+      http:
+        paths:
+          - path: /web
+            pathType: Prefix
+            backend:
+              service:
+                name: web-frontend-service
+                port:
+                  number: 80
+          - path: /mobile
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile-frontend-service
+                port:
+                  number: 80
+          # Option A: backend expects /api prefix → no rewrite needed
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 80
+
+          # Option B: backend root (/) with rewrite (uncomment annotations above + replace this block)
+          # - path: /api(/|$)(.*)
+          #   pathType: Prefix
+          #   backend:
+          #     service:
+          #       name: backend-service
+          #       port:
+          #         number: 80
+
+
+Prefer Ingress. If you really want NodePort instead, change both frontend services to:
+
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30001  # web (optional explicit)
+
+
+and similarly for mobile (e.g., 30002). Then access via http://<node-ip>:nodePort.
+
+2) Apply once (manually)
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/10-backend.yaml
+kubectl apply -f k8s/20-web.yaml
+kubectl apply -f k8s/21-mobile.yaml
+kubectl apply -f k8s/90-ingress.yaml
+kubectl get pods -n zaltix
+kubectl get svc -n zaltix
+kubectl get ingress -n zaltix
+
+
+If you don’t have an ingress controller yet:
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+
+
+Point DNS zaltix.example.com to your ingress controller’s public IP.
+
+3) Jenkins – add build/push of web & mobile + deploy
+
+A. Make sure you have:
+
+DockerHub creds: dockerhub
+
+(Optional) Kubeconfig credential: kubeconfig (Secret file)
+
+kubectl installed on the Jenkins agent
+
+B. Add stages (snippet you can merge at the end of your current pipeline):
+
+environment {
+  APP_VERSION     = "1.0.0"
+  DOCKERHUB_USER  = "rateshivakumar"
+}
+
+stage('Build & Push Web Image') {
+  steps {
+    dir('frontend/web') {
+      sh 'npm ci || npm install'
+      sh 'npm run build'
+    }
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/web-app:${APP_VERSION} frontend/web
+          docker tag ${DOCKERHUB_USER}/web-app:${APP_VERSION} ${DOCKERHUB_USER}/web-app:latest
+          docker push ${DOCKERHUB_USER}/web-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/web-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Build & Push Mobile Image') {
+  steps {
+    dir('frontend/mobile') {
+      sh 'npm ci || npm install'
+      sh 'npm run build'
+    }
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/mobile-app:${APP_VERSION} frontend/mobile
+          docker tag ${DOCKERHUB_USER}/mobile-app:${APP_VERSION} ${DOCKERHUB_USER}/mobile-app:latest
+          docker push ${DOCKERHUB_USER}/mobile-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/mobile-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Build & Push Backend Image') {
+  steps {
+    script {
+      docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+          docker build -t ${DOCKERHUB_USER}/backend-app:${APP_VERSION} backend
+          docker tag ${DOCKERHUB_USER}/backend-app:${APP_VERSION} ${DOCKERHUB_USER}/backend-app:latest
+          docker push ${DOCKERHUB_USER}/backend-app:${APP_VERSION}
+          docker push ${DOCKERHUB_USER}/backend-app:latest
+        """
+      }
+    }
+  }
+}
+
+stage('Deploy to Kubernetes') {
+  steps {
+    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+      sh '''
+        kubectl apply -f k8s/00-namespace.yaml
+        kubectl apply -f k8s/10-backend.yaml
+        kubectl apply -f k8s/20-web.yaml
+        kubectl apply -f k8s/21-mobile.yaml
+        kubectl apply -f k8s/90-ingress.yaml
+        kubectl -n zaltix rollout status deploy/backend
+        kubectl -n zaltix rollout status deploy/web-frontend
+        kubectl -n zaltix rollout status deploy/mobile-frontend
+      '''
+    }
+  }
+}
+
+
+If you want to auto-bump image tags each run, set APP_VERSION from a build param or Git commit SHA and update the YAMLs with sed before applying:
+
+sh "sed -i 's/backend-app:1.0.0/backend-app:${APP_VERSION}/' k8s/10-backend.yaml"
+sh "sed -i 's/web-app:1.0.0/web-app:${APP_VERSION}/' k8s/20-web.yaml"
+sh "sed -i 's/mobile-app:1.0.0/mobile-app:${APP_VERSION}/' k8s/21-mobile.yaml"
+
+How your frontends call backend
+
+If you use Ingress: frontends can call /api/... (same host), avoiding CORS.
+
+If you skip Ingress: set your frontend API_BASE_URL to http://backend-service.zaltix.svc.cluster.local (internal), or expose backend as NodePort and use http://<node-ip>:<port>.
