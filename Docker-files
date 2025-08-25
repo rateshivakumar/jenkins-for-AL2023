@@ -1,3 +1,49 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   docker login -u rateshivakumar 
+   
+   dckr_pat_FFseNXwim4pJ6dkvMAV-8zgWB90
+   
+   dockerhub@123
+   
+   # Update packages
+sudo yum update -y
+
+# Install docker
+sudo amazon-linux-extras enable docker
+sudo yum install -y docker
+
+# Start and enable docker service
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add jenkins and ec2-user to docker group (so they can run docker without sudo)
+sudo usermod -aG docker ec2-user
+sudo usermod -aG docker jenkins
+
+# Restart docker
+sudo systemctl restart docker
+
+# Verify installation
+docker --version
+
+
+
+
 Absolutely! Let’s create a step-by-step Docker + Docker Compose setup for your backend + two frontend apps (web + mobile). This will be clean, scalable, and production-friendly.
 
 Step 1: Organize Your Project Structure
