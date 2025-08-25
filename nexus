@@ -1,45 +1,59 @@
-  Nexus Installation Script (install-nexus.sh)
+📄 install-nexus.sh
 #!/bin/bash
 # =========================================
-# Nexus 3 Installation Script for Amazon Linux 2023
+# Nexus 3 Installation Script (Universal for Amazon Linux 2 & 2023)
 # =========================================
 
-# Exit on any error
-set -e
+set -e  # Exit on error
 
-echo "🚀 Updating system and installing dependencies..."
+# Variables
+NEXUS_VERSION="3.91.0-01"
+INSTALL_DIR="/opt"
+NEXUS_HOME="${INSTALL_DIR}/nexus"
+NEXUS_DATA="${INSTALL_DIR}/sonatype-work"
+NEXUS_TGZ="nexus-${NEXUS_VERSION}-unix.tar.gz"
+NEXUS_URL="https://download.sonatype.com/nexus/3/${NEXUS_TGZ}"
+
+echo "🚀 Updating system..."
 sudo yum update -y
-sudo yum install -y wget tar unzip
 
-echo "☕ Installing Java 17 (Amazon Corretto)..."
-sudo yum install -y java-17-amazon-corretto-devel
+echo "🔎 Detecting Amazon Linux version..."
+OS_VERSION=$(cat /etc/os-release | grep VERSION_ID | cut -d= -f2 | tr -d '"')
+
+if [[ "$OS_VERSION" == "2" ]]; then
+    echo "☕ Installing Java 17 (OpenJDK) for Amazon Linux 2..."
+    sudo amazon-linux-extras enable java-openjdk17
+    sudo yum install -y java-17-openjdk
+else
+    echo "☕ Installing Java 17 (Amazon Corretto) for Amazon Linux ${OS_VERSION}..."
+    sudo yum install -y java-17-amazon-corretto-devel
+fi
+
 java -version
 
-echo "📁 Creating directories and downloading Nexus..."
-sudo mkdir -p /app && cd /app
+echo "📁 Creating directories..."
+sudo mkdir -p ${INSTALL_DIR}
+cd ${INSTALL_DIR}
 
-# Download a tested Nexus version
-NEXUS_VERSION="3.91.0-01"
-NEXUS_FILE="nexus-${NEXUS_VERSION}-unix.tar.gz"
-NEXUS_URL="https://download.sonatype.com/nexus/3/${NEXUS_FILE}"
-
-sudo wget $NEXUS_URL -O nexus.tar.gz
+echo "📥 Downloading Nexus ${NEXUS_VERSION}..."
+sudo wget -q ${NEXUS_URL} -O nexus.tar.gz
 
 echo "📦 Extracting Nexus..."
 sudo tar -xvzf nexus.tar.gz
 sudo mv nexus-3* nexus
+sudo rm -f nexus.tar.gz
 
-echo "👤 Creating nexus user and setting ownership..."
-sudo adduser --system --no-create-home nexus || true
-sudo chown -R nexus:nexus /app/nexus
-sudo mkdir -p /app/sonatype-work
-sudo chown -R nexus:nexus /app/sonatype-work
+echo "👤 Creating nexus user..."
+sudo id nexus &>/dev/null || sudo useradd -r -m -s /bin/bash nexus
+sudo chown -R nexus:nexus ${NEXUS_HOME}
+sudo mkdir -p ${NEXUS_DATA}
+sudo chown -R nexus:nexus ${NEXUS_DATA}
 
 echo "⚙️ Configuring Nexus to run as 'nexus' user..."
-echo 'run_as_user="nexus"' | sudo tee /app/nexus/bin/nexus.rc
+echo 'run_as_user="nexus"' | sudo tee ${NEXUS_HOME}/bin/nexus.rc
 
-echo "📄 Creating systemd service for Nexus..."
-sudo tee /etc/systemd/system/nexus.service > /dev/null << 'EOF'
+echo "📄 Creating systemd service..."
+sudo tee /etc/systemd/system/nexus.service > /dev/null <<EOF
 [Unit]
 Description=Nexus Repository Manager
 After=network.target
@@ -49,51 +63,32 @@ Type=forking
 LimitNOFILE=65536
 User=nexus
 Group=nexus
-ExecStart=/app/nexus/bin/nexus start
-ExecStop=/app/nexus/bin/nexus stop
+ExecStart=${NEXUS_HOME}/bin/nexus start
+ExecStop=${NEXUS_HOME}/bin/nexus stop
 Restart=on-abort
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "🔄 Reloading systemd, enabling and starting Nexus..."
+echo "🔄 Starting Nexus service..."
 sudo systemctl daemon-reload
 sudo systemctl enable nexus
 sudo systemctl start nexus
-sudo systemctl status nexus --no-pager
 
-echo "✅ Nexus should now be running on port 8081"
-echo "Access via: http://<YOUR_EC2_PUBLIC_IP>:8081"
-echo "Default admin password is located in: /app/sonatype-work/nexus3/admin.password"
+===================================================== 
 
-How to Use
+echo "✅ Nexus is now running on port 8081"
+echo "👉 Access URL: http://<EC2-PUBLIC-IP>:8081"
+echo "👉 Admin password: ${NEXUS_DATA}/nexus3/admin.password"
 
-Save the script:
-
-vi install-nexus.sh
-# Paste the script and save
-
-
-Make it executable:
-
+🚀 How to Use
+vi install-nexus.sh      # paste script
 chmod +x install-nexus.sh
-
-
-Run it:
-
 sudo ./install-nexus.sh
 
 
-Check the status:
+Then check:
 
 sudo systemctl status nexus
 sudo ss -tulnp | grep 8081
-
-
-Access Nexus in browser:
-
-http://<EC2-PUBLIC-IP>:8081
-
-
-Admin password: /app/sonatype-work/nexus3/admin.password
