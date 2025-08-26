@@ -92,3 +92,40 @@ Then check:
 
 sudo systemctl status nexus
 sudo ss -tulnp | grep 8081
+
+============================================================= 
+
+🔄 Restart Nexus Container
+# Stop Nexus container
+docker stop nexus
+
+# Start Nexus container again
+docker start nexus
+
+
+OR in a single step:
+
+docker restart nexus
+
+✅ Verify it’s running
+docker ps | grep nexus
+
+
+You should see something like:
+
+sonatype/nexus3:3.83.1-java17-ubi   "/opt/sonatype/nexus…"   Up 10 seconds   0.0.0.0:8081->8081/tcp   nexus
+
+🌍 Access Nexus
+
+Open browser: http://<EC2-Public-IP>:8081
+
+Username: admin
+
+Password: run:
+
+docker exec -it nexus cat /nexus-data/admin.password
+
+
+⚡ Pro tip: If you want Nexus to start automatically after server reboot, use:
+
+docker update --restart=always nexus
