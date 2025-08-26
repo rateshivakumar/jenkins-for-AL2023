@@ -32,3 +32,65 @@ sudo -u sonar /opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh status
 
 # Access SonarQube UI at http://<SERVER_PUBLIC_IP>:9000
 echo "✅ Default login: admin / admin (change password after first login)"
+
+
+
+
+
+=========================================================================== 
+
+
+
+1️⃣ Create the service file
+sudo nano /etc/systemd/system/sonarqube.service
+
+
+Paste the following content:
+
+[Unit]
+Description=SonarQube service
+After=syslog.target network.target
+
+[Service]
+Type=forking
+
+# User and group to run SonarQube
+User=sonar
+Group=sonar
+
+# SonarQube paths
+ExecStart=/opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh stop
+ExecReload=/opt/sonarqube-8.9.6.50800/bin/linux-x86-64/sonar.sh restart
+
+# Make systemd wait a bit before killing the process
+TimeoutSec=120
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+2️⃣ Reload systemd and enable the service
+sudo systemctl daemon-reload
+sudo systemctl enable sonarqube
+
+
+enable ensures it starts automatically on server reboot.
+
+3️⃣ Start or restart the service manually
+sudo systemctl start sonarqube
+sudo systemctl restart sonarqube
+
+4️⃣ Check status
+sudo systemctl status sonarqube
+
+
+You should see Active: active (running) and the PID of the Java process.
+
+5️⃣ Verify port
+sudo netstat -tulnp | grep 9000
+# or
+sudo ss -tulnp | grep 9000
+
+
+You should see SonarQube listening on 9000.
