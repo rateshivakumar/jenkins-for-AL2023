@@ -1,0 +1,69 @@
+📄 git-collaboration-workflow.md
+# GitHub Collaboration Workflow 🚀
+
+## 1. Owner: Add Contributor
+- Go to your GitHub repo → **Settings → Collaborators & Teams**
+- Add contributor by their GitHub username
+- Contributor accepts invite ✅
+
+---
+
+## 2. Both (Owner & Contributor): Clone Repo
+```bash
+git clone https://github.com/<your-username>/<repo-name>.git
+cd <repo-name>
+
+3. Create a New Branch (Don’t work directly on main)
+git checkout -b feature/<your-change>
+
+4. Make Changes → Stage → Commit
+# edit files...
+
+git add .
+git commit -m "Added feature/fix"
+
+5. Sync with Latest Main (to avoid conflicts)
+git checkout main
+git pull origin main      # get latest changes from GitHub
+
+git checkout feature/<your-change>
+git merge main            # merge updates into your branch
+
+6. Push Branch to GitHub
+git push origin feature/<your-change>
+
+7. Create a Pull Request (PR)
+
+Go to GitHub repo in browser
+
+Click Compare & Pull Request
+
+Base branch = main
+
+Compare branch = feature/<your-change>
+
+Add title + description
+
+Click Create Pull Request
+
+8. Owner: Review & Merge PR
+
+Open PR → Review changes
+
+Click Merge Pull Request → Confirm Merge
+
+✅ Changes are now in main
+
+9. Sync Everyone’s Local Main
+git checkout main
+git pull origin main
+
+✅ End Result
+
+All contributors work in separate branches
+
+Push changes → Raise PRs
+
+Owner merges PRs into main
+
+Everyone syncs with main
