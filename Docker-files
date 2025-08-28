@@ -186,3 +186,125 @@ Check logs:
 docker-compose logs -f backend
 docker-compose logs -f web-frontend
 docker-compose logs -f mobile-frontend
+
+
+
+
+
+
+====================================================  
+
+
+restar docker 
+
+
+
+1️⃣ Eshcul (Mobile App with Expo/React Native Web)
+
+Your structure:
+
+Eshcul/
+├── Dockerfile
+├── app/
+│   ├── config/
+│   │   └── config.js
+│   ├── index.tsx
+│   ├── *.tsx …
+├── package.json
+├── package-lock.json
+
+
+👉 Use this Eshcul/Dockerfile:
+
+# Use Node.js base image
+FROM node:18
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and lock file
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy everything into container
+COPY . .
+
+# Copy config.js correctly (from app/config/)
+COPY app/config/config.js ./app/config/config.js
+
+# Expose port for Expo web
+EXPOSE 8081
+
+# Start Expo in web mode
+CMD ["npm", "start"]
+
+2️⃣ sphere-entry-animated-home-main (Web / React + Vite)
+
+Your structure:
+
+sphere-entry-animated-home-main/
+├── Dockerfile
+├── src/
+│   ├── pages/
+│   │   ├── config/
+│   │   │   └── config.js
+│   ├── main.tsx
+│   ├── …
+├── package.json
+├── package-lock.json
+
+
+👉 Use this sphere-entry-animated-home-main/Dockerfile:
+
+# Build stage
+FROM node:18 AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+# Copy config.js from src/pages/config/
+COPY src/pages/config/config.js ./src/pages/config/config.js
+
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+
+WORKDIR /usr/share/nginx/html
+
+# Copy built files from previous stage
+COPY --from=build /app/dist .
+
+# Expose port 80
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+
+3️⃣ How to Run
+
+If you’re using docker-compose.yml at root (ZaltixSchool/), define services like:
+
+version: "3.8"
+services:
+  eshcul:
+    build: ./Eshcul
+    ports:
+      - "8081:8081"
+    restart: always
+
+  web:
+    build: ./sphere-entry-animated-home-main
+    ports:
+      - "80:80"
+    restart: always
+
+
+Then run:
+
+docker-compose up --build -d
