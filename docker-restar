@@ -1,0 +1,115 @@
+🔄 Full Restart Steps for Your Docker Setup
+1. Go to your project root
+cd ~/ZaltixSchool
+
+
+This should contain:
+
+docker-compose.yml
+backend/
+Eshcul/
+sphere-entry-animated-home-main/
+
+2. Fix Dockerfiles
+(a) Backend → backend/Dockerfile
+FROM node:18
+
+WORKDIR /app
+
+# Copy dependencies first
+COPY package*.json ./
+
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose backend port
+EXPOSE 5000
+
+# Start the backend (no nodemon!)
+CMD ["node", "index.js"]
+
+(b) Eshcul (mobile/web app) → Eshcul/Dockerfile
+FROM node:18
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 8081
+
+CMD ["npm", "start"]
+
+(c) Web (sphere-entry) → sphere-entry-animated-home-main/Dockerfile
+# Build stage
+FROM node:18 AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Serve with Nginx
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+3. Update docker-compose.yml
+
+Make sure your docker-compose.yml looks like this (only relevant parts):
+
+version: "3.8"
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+
+  eshcul:
+    build: ./Eshcul
+    ports:
+      - "8081:8081"
+
+  web:
+    build: ./sphere-entry-animated-home-main
+    ports:
+      - "8083:80"
+
+4. Clean old containers & images
+docker-compose down -v --rmi all
+
+
+This removes containers, volumes, and old images so we start fresh.
+
+5. Rebuild and start
+docker-compose up --build -d
+
+6. Verify containers
+docker ps
+
+
+Expected:
+
+backend → 0.0.0.0:5000->5000/tcp
+
+eshcul → 0.0.0.0:8081->8081/tcp
+
+web → 0.0.0.0:8083->80/tcp
+
+7. Check logs if any fail
+docker logs <container_name>
+
+8. Test in Browser
+
+Backend: http://13.203.206.31:5000
+
+Eshcul: http://13.203.206.31:8081
+
+Web (sphere-entry): http://13.203.206.31:8083
