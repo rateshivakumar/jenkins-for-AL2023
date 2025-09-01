@@ -135,3 +135,81 @@ docker-compose down -v --rmi all
 docker-compose up --build -d
 
 
+================================================================ 
+
+📌 File: zaltixschool.sh
+#!/bin/bash
+# ZaltixSchool Project Manager Script
+# Usage: ./zaltixschool.sh up | down | restart | status | logs
+
+PROJECT_DIR="/root/ZaltixSchool"
+
+cd $PROJECT_DIR || { echo "❌ Project directory not found"; exit 1; }
+
+case "$1" in
+  up)
+    echo "🚀 Starting ZaltixSchool stack..."
+    docker-compose down -v --remove-orphans
+    docker-compose build
+    docker-compose up -d
+    ;;
+
+  down)
+    echo "🛑 Stopping ZaltixSchool stack..."
+    docker-compose down -v --remove-orphans
+    ;;
+
+  restart)
+    echo "🔄 Restarting ZaltixSchool stack..."
+    docker-compose down -v --remove-orphans
+    docker-compose build
+    docker-compose up -d
+    ;;
+
+  status)
+    echo "📊 Checking running containers..."
+    docker ps --filter "name=zaltixschool"
+    ;;
+
+  logs)
+    echo "📜 Showing logs (Ctrl+C to exit)..."
+    docker-compose logs -f
+    ;;
+
+  *)
+    echo "⚡ Usage: $0 {up|down|restart|status|logs}"
+    exit 1
+    ;;
+esac
+
+✅ Setup Once
+cd /root/ZaltixSchool
+nano zaltixschool.sh   # paste the script above
+chmod +x zaltixschool.sh
+
+🚀 Usage
+
+First time (or rebuild all):
+
+./zaltixschool.sh up
+
+
+Stop everything:
+
+./zaltixschool.sh down
+
+
+Restart stack:
+
+./zaltixschool.sh restart
+
+
+Check containers:
+
+./zaltixschool.sh status
+
+
+Follow logs:
+
+./zaltixschool.sh logs
+
