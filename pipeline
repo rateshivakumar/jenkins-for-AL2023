@@ -1,13 +1,18 @@
-   
-   
-   pipeline {
+pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS'   // NodeJS tool configured in Jenkins
+        nodejs 'NodeJS'
+    }
+
+    environment {
+        DOCKER_REGISTRY = 'https://index.docker.io/v1/'
+        DOCKER_CREDENTIALS = 'dockerhub'
+        SONARQUBE = 'sonar'
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 echo "📥 Checking out code from GitHub"
@@ -19,7 +24,15 @@
         stage('Install Dependencies') {
             steps {
                 dir('backend') {
-                    echo "📦 Installing Node.js dependencies"
+                    echo "📦 Installing backend Node.js dependencies"
+                    sh 'npm install'
+                }
+                dir('sphere-entry-animated-home-main') {
+                    echo "📦 Installing web Node.js dependencies"
+                    sh 'npm install'
+                }
+                dir('Eshcul') {
+                    echo "📦 Installing mobile Node.js dependencies"
                     sh 'npm install'
                 }
             }
@@ -27,14 +40,14 @@
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar') {
+                withSonarQubeEnv("${SONARQUBE}") {
                     withCredentials([string(credentialsId: 'sonar-scanner', variable: 'SONAR_TOKEN')]) {
                         withEnv(["PATH+SONAR=${tool 'SonarQubeScanner'}/bin"]) {
                             sh '''
                                 echo "🔎 Checking sonar-scanner version..."
                                 sonar-scanner -v
 
-                                echo "🚀 Running SonarQube analysis..."
+                                echo "🚀 Running SonarQube analysis for backend..."
                                 sonar-scanner \
                                   -Dsonar.projectKey=ZaltixSchool \
                                   -Dsonar.sources=backend \
@@ -47,13 +60,13 @@
             }
         }
 
-        stage('Package Node.js App') {
+        stage('Package Backend App') {
             steps {
-                echo "📦 Packaging Node.js app into tar.gz"
+                echo "📦 Packaging backend Node.js app into tar.gz"
                 sh '''
                     cd backend
-                    tar -czf ZaltixSchool-1.0.0.tar.gz *
-                    mv ZaltixSchool-1.0.0.tar.gz ../
+                    tar -czf ZaltixSchool-backend-${BUILD_NUMBER}.tar.gz *
+                    mv ZaltixSchool-backend-${BUILD_NUMBER}.tar.gz ../
                 '''
             }
         }
@@ -62,26 +75,63 @@
             steps {
                 nexusArtifactUploader(
                     artifacts: [[
-                        artifactId: 'ZaltixSchool',
+                        artifactId: 'ZaltixSchool-backend',
                         classifier: '',
-                        file: 'ZaltixSchool-1.0.0.tar.gz',   // Node.js packaged tar.gz
+                        file: "ZaltixSchool-backend-${BUILD_NUMBER}.tar.gz",
                         type: 'tar.gz'
                     ]],
-                    credentialsId: 'nexus',            // Jenkins Credentials ID for Nexus
-                    groupId: 'in.zaltix.school',            // logical folder structure
-                    nexusUrl: '3.109.152.197:8081',        // your Nexus URL
+                    credentialsId: 'nexus',
+                    groupId: 'in.zaltix.school',
+                    nexusUrl: '52.66.248.93:8081',
                     nexusVersion: 'nexus3',
                     protocol: 'http',
-                    repository: 'nodejs',                  // Nexus hosted repo name
-                    version: '1.0.0'
+                    repository: 'nodejs',
+                    version: "${BUILD_NUMBER}"
                 )
             }
         }
+
+        stage('Build & Push Backend Image') {
+            steps {
+                script {
+                    sh 'docker system prune -af || true'
+                    docker.withRegistry("${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS}") {
+                        def backendImage = docker.build("rateshivakumar/zaltix-backend:${BUILD_NUMBER}", "-f backend/Dockerfile backend")
+                        backendImage.push()
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Web Image') {
+            steps {
+                script {
+                    sh 'docker system prune -af || true'
+                    docker.withRegistry("${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS}") {
+                        def webImage = docker.build("rateshivakumar/zaltix-web:${BUILD_NUMBER}", "-f sphere-entry-animated-home-main/Dockerfile sphere-entry-animated-home-main")
+                        webImage.push()
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Mobile Image') {
+            steps {
+                script {
+                    sh 'docker system prune -af || true'
+                    docker.withRegistry("${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS}") {
+                        def mobileImage = docker.build("rateshivakumar/zaltix-mobile:${BUILD_NUMBER}", "-f Eshcul/Dockerfile Eshcul")
+                        mobileImage.push()
+                    }
+                }
+            }
+        }
+
     }
 
     post {
         success {
-            echo "✅ Pipeline finished successfully!"
+            echo "✅ Pipeline finished successfully! All images pushed to Docker Hub."
         }
         failure {
             echo "❌ Pipeline failed. Check logs above."
