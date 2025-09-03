@@ -82,5 +82,9 @@ eksctl create cluster \
 
 Check cluster:
 
+eksctl get cluster --region us-east-1
+aws eks delete-cluster --name my-cluster --region us-east-1
+
+
 aws eks --region us-east-1 update-kubeconfig --name my-cluster
 kubectl get nodes
