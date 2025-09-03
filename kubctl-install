@@ -1,0 +1,86 @@
+setup-eks.sh
+
+#!/bin/bash
+
+set -e
+
+echo "🚀 Setting up AWS CLI, kubectl, and eksctl on Git Bash (Windows)..."
+
+# 1️⃣ Install AWS CLI (download MSI manually for Windows if not already installed)
+if ! command -v aws &> /dev/null; then
+  echo "⚠️ Please install AWS CLI v2 manually from:"
+  echo "https://awscli.amazonaws.com/AWSCLIV2.msi"
+  echo "Then run: aws --version"
+else
+  aws --version
+fi
+
+# 2️⃣ Create ~/bin if not exists
+mkdir -p ~/bin
+
+# 3️⃣ Install kubectl (Windows exe)
+echo "⬇️ Downloading kubectl..."
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/windows/amd64/kubectl.exe"
+mv kubectl.exe ~/bin/
+
+# 4️⃣ Install eksctl (Windows exe)
+echo "⬇️ Downloading eksctl..."
+curl -LO "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_windows_amd64.zip"
+unzip -o eksctl_windows_amd64.zip -d /tmp
+mv /tmp/eksctl.exe ~/bin/
+
+# 5️⃣ Add ~/bin to PATH if not already
+if ! grep -q 'export PATH=$HOME/bin:$PATH' ~/.bashrc; then
+  echo 'export PATH=$HOME/bin:$PATH' >> ~/.bashrc
+  source ~/.bashrc
+fi
+
+# 6️⃣ Verify installations
+echo "✅ Versions:"
+aws --version || echo "⚠️ AWS CLI not installed via script (install MSI manually)"
+kubectl version --client
+eksctl version
+
+echo "🎉 Setup complete! Now run: aws configure"
+
+
+▶️ How to Run
+
+Save the file as setup-eks.sh
+
+Run inside Git Bash:
+
+bash setup-eks.sh
+
+
+When done, configure AWS:
+
+aws configure
+
+
+Enter:
+
+AWS Access Key ID
+
+AWS Secret Access Key
+
+Default region (e.g., us-east-1)
+
+Output format (json)
+
+✅ After Setup
+
+Create your cluster:
+
+eksctl create cluster \
+  --name my-cluster \
+  --region us-east-1 \
+  --nodes 2 \
+  --node-type t3.medium \
+  --managed
+
+
+Check cluster:
+
+aws eks --region us-east-1 update-kubeconfig --name my-cluster
+kubectl get nodes
