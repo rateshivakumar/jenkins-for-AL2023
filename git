@@ -58,7 +58,9 @@ Click Merge Pull Request → Confirm Merge
 git checkout main
 git pull origin main
 
-✅ End Result
+✅ End Resultgit reset --hard
+git pull origin main
+
 
 All contributors work in separate branches
 
@@ -67,3 +69,9 @@ Push changes → Raise PRs
 Owner merges PRs into main
 
 Everyone syncs with main
+----------------------------------------------
+changes after changes in github repo
+git reset --hard
+git pull origin main
+
+
