@@ -75,8 +75,31 @@ git reset --hard
 git pull origin main
 
 
+  ===============================================
+🚀 Git Commands Cheat Sheet (Local ↔ GitHub)
+# Go inside your project folder
+cd C:\Users\rates\Desktop\Git-folder
 
+# Check what changed
+git status
 
+# Stage all changes
+git add .
+
+# Commit changes with a message
+git commit -m "Added new feature"
+
+# Push changes to GitHub
+git push
+
+# ---------------------------------------------------------
+# If GitHub repo already has files (README, .gitignore, etc.)
+# Option 1 (Recommended): Merge GitHub files into local
+git pull origin main --allow-unrelated-histories
+git push -u origin main
+
+# Option 2 (Force Overwrite): Replace GitHub with local repo
+git push origin main --force
 
 =========================================================
 🚀 Git Push Guide (Local → GitHub)
