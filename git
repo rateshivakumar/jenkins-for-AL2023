@@ -75,3 +75,87 @@ git reset --hard
 git pull origin main
 
 
+
+
+
+=========================================================
+🚀 Git Push Guide (Local → GitHub)
+✅ First-Time Setup
+
+Go inside your project folder:
+
+cd C:\Users\rates\Desktop\Git-folder
+
+
+Initialize Git (only once per project):
+
+git init
+
+
+Add remote GitHub repo (replace with your repo URL):
+
+git remote add origin https://github.com/rateshivakumar/Soprts.git
+
+✅ If GitHub Repo Already Has Some Files (like README)
+
+You have 2 choices:
+===================================
+Option 1 (Recommended): Merge GitHub’s files into local
+
+This way you don’t lose GitHub’s files.
+
+git pull origin main --allow-unrelated-histories
+git push -u origin main
+
+Option 2 (Force Overwrite): Replace GitHub with your local repo
+
+⚠️ Careful — this will delete everything in GitHub and replace it with your local project.
+
+git push origin main --force
+========================================
+✅ Standard Workflow (Daily Use)
+
+When you make changes in local and want to push to GitHub:
+
+Check what changed
+
+git status
+
+
+Stage changes (all files)
+
+git add .
+
+
+Commit changes
+
+git commit -m "Your message here"
+
+
+Push to GitHub
+
+git push
+
+✅ Example Flow
+git status
+git add .
+git commit -m "Added new feature"
+git push
+
+✅ Useful Tips
+
+Add a specific file instead of all:
+
+git add filename.txt
+
+
+Check commit history (short):
+
+git log --oneline
+
+
+Pull latest changes from GitHub before pushing (safe practice):
+
+git pull origin main
+
+
