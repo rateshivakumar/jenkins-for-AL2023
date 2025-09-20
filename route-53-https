@@ -1,0 +1,122 @@
+🛠 Step 1: Create Hosted Zone in Route 53
+
+Go to Route 53 → Hosted zones → Create hosted zone
+
+Domain name: zaltix.com
+
+Type: Public hosted zone
+
+Click Create.
+
+AWS will give you Name Server (NS) records → update these NS values in your domain registrar (e.g., GoDaddy, Namecheap).
+
+🛠 Step 2: Add DNS Records
+
+Inside hosted zone, click Create record:
+
+For login.zaltix.com → point to ALB DNS name
+
+Record type: A (alias)
+
+Value: Your ALB DNS (e.g., alb-123456.elb.amazonaws.com)
+
+TTL: 60 seconds.
+
+For any CNAME you need (optional):
+
+Example: api.zaltix.com → backend-alb-xxxx.elb.amazonaws.com
+
+Verify with commands in your terminal:
+
+ping login.zaltix.com
+nslookup login.zaltix.com
+
+
+You should see it resolving to the ALB.
+
+🛠 Step 3: Request SSL Certificate in ACM
+
+Go to AWS Certificate Manager (ACM) → Request a certificate.
+
+Choose Request a public certificate.
+
+Add domains:
+
+zaltix.com
+
+*.zaltix.com (for all subdomains like login.zaltix.com).
+
+Choose DNS validation.
+
+ACM will show a CNAME record for validation → Click Create records in Route 53.
+(This automatically creates validation record in hosted zone).
+
+Wait until the status shows Issued.
+
+🛠 Step 4: Configure HTTPS on Load Balancer
+
+Go to EC2 → Load balancers.
+
+Select your Application Load Balancer (ALB).
+
+Add Listener for HTTPS (443):
+
+Protocol: HTTPS
+
+Port: 443
+
+Default action: Forward to your target group.
+
+SSL Certificate: Select the ACM certificate you created.
+
+Also edit existing HTTP (80) listener:
+
+Action → Redirect to HTTPS (443).
+
+Save changes.
+
+🛠 Step 5: Test Access
+
+Open browser → https://login.zaltix.com
+It should load via HTTPS with a green lock ✅.
+
+Try accessing http://login.zaltix.com → should automatically redirect to HTTPS.
+
+✅ Now your flow is:
+
+Route53 → DNS resolution (login.zaltix.com → ALB)
+
+ACM → SSL cert validation
+
+ALB → Handles HTTPS (443) with cert
+
+###################################################################################################
+
+                 
+   ###########################################
+   
+   route53 --- creat hosted zoon
+   dns---name space--add
+    add-records --like sub name and c name records ex : record name :login and front end load balanecr {ttl:60}, 
+	if you access login .com it will take time to get page
+
+ in terminal : ping login.zaltix.com
+             : nslookup login.zaltix.com
+			 
+####################################################
+
+  certificate manager ---- for https
+  requast a public certificate
+  fully qualified domain name :zaltix.com
+  below same *.zaltix.com  
+   dns certificate validation requast then go to route53 add record (in below dns requast create recordis there)
+   
+   in certificate manager you can see the certificate
+   
+   then go to loadbalancer add listineer -- https and port 443 and target group select from acm select certificate
+   then access
+    port forwardnig to http to https ------------ manage listineer  select redirect url :https :443 save changes 
+
+
+              
+Target group → Forwards traffic to backend
