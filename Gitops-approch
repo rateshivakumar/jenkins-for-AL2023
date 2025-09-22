@@ -1,0 +1,90 @@
+🌐 GitOps Deployment Flow (with ArgoCD or Flux)
+🛠 Step 1: Git Repo Structure
+
+Create a Git repo (e.g., zaltix-k8s-manifests) with structure:
+
+zaltix-k8s-manifests/
+ ├── web/
+ │    └── web-deployment.yaml
+ ├── mobile/
+ │    └── mobile-deployment.yaml
+ ├── ingress/
+ │    └── ingress.yaml
+ ├── kustomization.yaml   (optional, if you use Kustomize)
+
+
+Each folder contains Kubernetes YAML manifests:
+
+web-deployment.yaml → web Deployment + Service
+
+mobile-deployment.yaml → mobile Deployment + Service
+
+ingress.yaml → ALB Ingress with ACM certificate ARN
+
+🛠 Step 2: Install ArgoCD in EKS
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+
+Get ArgoCD password:
+
+kubectl get pods -n argocd
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 -d
+
+
+Port-forward to login:
+
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+
+Open → https://localhost:8080 → Login with admin + password above.
+
+🛠 Step 3: Connect Git Repo to ArgoCD
+
+In ArgoCD UI → New App:
+
+Application Name: zaltix-apps
+
+Project: default
+
+Sync Policy: Automatic (for GitOps)
+
+Repository URL: GitHub repo (https://github.com/<user>/zaltix-k8s-manifests.git)
+
+Path: / (root, or web/, mobile/, etc.)
+
+Cluster: EKS cluster
+
+Namespace: default (or custom)
+
+Click Create → ArgoCD starts syncing manifests.
+
+🛠 Step 4: Update Flow
+
+You push changes to Git (e.g., new Docker image version zaltix-web:v2).
+
+Git repo gets updated (e.g., edit web-deployment.yaml → new image).
+
+ArgoCD detects changes and applies them automatically to EKS.
+
+ALB + ACM + Route53 routing remain intact (Ingress handles it).
+
+🛠 Step 5: Testing
+
+Open browser:
+
+https://login.zaltix.com → Web frontend
+
+https://api.zaltix.com → Mobile backend
+
+Both apps run behind one ALB, secured by one ACM cert, and fully GitOps managed.
+
+✅ Final GitOps Benefits:
+
+No manual kubectl apply ever again.
+
+Rollbacks → just revert Git commit.
+
+History/audit trail of changes.
+
+Infra + apps → single source of truth in Git.
