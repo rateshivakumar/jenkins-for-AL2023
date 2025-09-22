@@ -1,0 +1,177 @@
+
+
+  🟦 Web Application (web-deployment.yaml)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-deployment
+  labels:
+    app: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: rateshivakumar/zaltix-web:latest   # ✅ your web Docker Hub image
+          ports:
+            - containerPort: 80   # App inside container listens on port 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+  labels:
+    app: web
+spec:
+  selector:
+    app: web
+  ports:
+    - protocol: TCP
+      port: 80        # Service port exposed to Ingress
+      targetPort: 80  # Maps to container port
+  type: ClusterIP     # ✅ only internal, Ingress will expose it
+
+🟩 Mobile Application (mobile-deployment.yaml)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-deployment
+  labels:
+    app: mobile
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mobile
+  template:
+    metadata:
+      labels:
+        app: mobile
+    spec:
+      containers:
+        - name: mobile
+          image: rateshivakumar/zaltix-mobile:latest   # ✅ your mobile Docker Hub image
+          ports:
+            - containerPort: 80   # App inside container listens on port 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-service
+  labels:
+    app: mobile
+spec:
+  selector:
+    app: mobile
+  ports:
+    - protocol: TCP
+      port: 80        # Service port exposed to Ingress
+      targetPort: 80  # Maps to container port
+  type: ClusterIP     # ✅ only internal, Ingress will expose it
+
+🚀 Deployment Steps
+
+Apply web and mobile apps:
+
+kubectl apply -f web-deployment.yaml
+kubectl apply -f mobile-deployment.yaml
+
+
+Apply Ingress (the YAML you already have):
+
+kubectl apply -f ingress.yaml
+
+
+Check:
+
+kubectl get pods
+kubectl get svc
+kubectl get ingress
+
+
+Copy the ALB DNS name from:
+
+kubectl get ingress app-ingress
+
+
+In Route 53:
+
+login.zaltix.com → Alias → ALB DNS
+
+api.zaltix.com → Alias → ALB DNS
+
+✅ Final Flow
+
+https://login.zaltix.com → goes to web pods
+
+https://api.zaltix.com → goes to mobile pods
+
+Both secured with ACM certificate
+
+ALB automatically handles HTTP → HTTPS redirect
+
+
+######################################################################## 
+
+
+
+  ⚙️ Option 2: Ingress (YAML) — Production / Automation
+
+The Kubernetes-native way:
+
+🛠 Step 1: Deploy Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/xxxx   # replace with ACM cert ARN
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  rules:
+    - host: login.zaltix.com
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: web-service
+              port:
+                number: 80
+    - host: api.zaltix.com
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: mobile-service
+              port:
+                number: 80
+
+
+Apply:
+
+kubectl apply -f ingress.yaml
+
+🛠 Step 2: Verify
+kubectl get ingress app-ingress
+
+
+You’ll get an ALB DNS name (e.g., k8s-app-ingress-xxxx.elb.amazonaws.com)
+
+In Route 53, create A-records for login.zaltix.com and api.zaltix.com pointing to that ALB
+
+✅ Done! This way is GitOps-friendly, self-healing, and production-ready.
