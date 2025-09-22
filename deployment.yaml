@@ -136,7 +136,7 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80,"HTTPS":443}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/xxxx   # replace with ACM cert ARN
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/xxxx   # replace with ACM cert ARN # Tip: Run this command to see the ARN of your certs: ## aws acm list-certificates --region us-east-1
     alb.ingress.kubernetes.io/ssl-redirect: "443"
 spec:
   rules:
