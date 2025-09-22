@@ -88,3 +88,29 @@ Rollbacks → just revert Git commit.
 History/audit trail of changes.
 
 Infra + apps → single source of truth in Git.
+
+
+
+🛠 kustomization.yaml (at repo root)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - web/web-deployment.yaml
+  - mobile/mobile-deployment.yaml
+  - ingress/ingress.yaml
+
+✅ How to use with ArgoCD
+
+Push this repo to GitHub: zaltix-k8s-manifests.
+
+In ArgoCD → Create App:
+
+Repo URL: https://github.com/<your-username>/zaltix-k8s-manifests.git
+
+Path: / (root)
+
+Cluster: your EKS
+
+Namespace: default (or zaltix-apps)
+
+Sync → ArgoCD will deploy web + mobile + ingress automatically.
