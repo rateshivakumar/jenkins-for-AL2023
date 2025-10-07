@@ -1,0 +1,189 @@
+🧠 1. List all IAM users in the AWS account
+
+Question:
+Write a Python script using boto3 to list all IAM users in your AWS account.
+
+Answer:
+
+import boto3
+
+# Create IAM client
+iam = boto3.client('iam')
+
+response = iam.list_users()
+
+print("All IAM Users:")
+for user in response['Users']:
+    print(user['UserName'], "-", user['CreateDate'])
+
+
+✅ Concept Tested: Using boto3.client('iam'), iterating through API response, pagination understanding.
+
+🧠 2. Find users who have not logged in for more than 90 days
+
+Question:
+Write a boto3 script that lists IAM users whose last login was more than 90 days ago (inactive users).
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone, timedelta
+
+iam = boto3.client('iam')
+
+threshold_date = datetime.now(timezone.utc) - timedelta(days=90)
+response = iam.list_users()
+
+print("Inactive Users (no login in last 90 days):")
+for user in response['Users']:
+    if 'PasswordLastUsed' in user:
+        if user['PasswordLastUsed'] < threshold_date:
+            print(user['UserName'], "-", user['PasswordLastUsed'])
+    else:
+        print(user['UserName'], "- Never Logged In")
+
+
+✅ Concept Tested: Time comparison, filtering inactive users, IAM user management.
+
+🧠 3. Get the number of IAM users logged in within a particular time window
+
+Question:
+Write a script to count users who logged in between 9 AM and 6 PM on a specific date.
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone
+
+iam = boto3.client('iam')
+
+# Define your date and time window (UTC)
+start_time = datetime(2025, 10, 6, 9, 0, 0, tzinfo=timezone.utc)
+end_time   = datetime(2025, 10, 6, 18, 0, 0, tzinfo=timezone.utc)
+
+count = 0
+response = iam.list_users()
+
+for user in response['Users']:
+    if 'PasswordLastUsed' in user:
+        last_login = user['PasswordLastUsed']
+        if start_time <= last_login <= end_time:
+            count += 1
+            print(user['UserName'], "-", last_login)
+
+print("Total users logged in during working hours:", count)
+
+
+✅ Concept Tested: Working with datetime, filtering, IAM login data.
+
+🧠 4. List EC2 instances that are in “stopped” state for more than 7 days
+
+Question:
+Write a boto3 script that identifies EC2 instances stopped for more than 7 days.
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone, timedelta
+
+ec2 = boto3.client('ec2')
+response = ec2.describe_instances()
+
+stopped_threshold = datetime.now(timezone.utc) - timedelta(days=7)
+
+print("Instances stopped >7 days:")
+for reservation in response['Reservations']:
+    for instance in reservation['Instances']:
+        state = instance['State']['Name']
+        if state == 'stopped':
+            state_change_time = instance.get('StateTransitionReason', '')
+            print(instance['InstanceId'], "-", state_change_time)
+
+
+✅ Concept Tested: EC2 state filtering, date parsing, automation audit.
+
+🧠 5. Find S3 buckets not accessed in last 30 days (using CloudTrail)
+
+Question:
+Write a script that lists all S3 buckets that haven’t been accessed in the last 30 days (requires CloudTrail logs).
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone, timedelta
+
+s3 = boto3.client('s3')
+cloudtrail = boto3.client('cloudtrail')
+
+buckets = [b['Name'] for b in s3.list_buckets()['Buckets']]
+threshold_date = datetime.now(timezone.utc) - timedelta(days=30)
+
+for bucket in buckets:
+    events = cloudtrail.lookup_events(
+        LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': bucket}],
+        StartTime=threshold_date
+    )
+    if not events['Events']:
+        print(bucket, "- No access in last 30 days")
+
+
+✅ Concept Tested: CloudTrail lookup, S3 access tracking, boto3 multi-service scripting.
+
+🧠 6. Get CPU utilization of all EC2 instances (CloudWatch)
+
+Question:
+Write a script that prints average CPU utilization for all running EC2 instances.
+
+Answer:
+
+import boto3
+from datetime import datetime, timedelta, timezone
+
+cloudwatch = boto3.client('cloudwatch')
+ec2 = boto3.client('ec2')
+
+instances = ec2.describe_instances()
+end = datetime.now(timezone.utc)
+start = end - timedelta(hours=1)
+
+print("CPU Utilization (Last 1 Hour):")
+for reservation in instances['Reservations']:
+    for instance in reservation['Instances']:
+        if instance['State']['Name'] == 'running':
+            instance_id = instance['InstanceId']
+            metrics = cloudwatch.get_metric_statistics(
+                Namespace='AWS/EC2',
+                MetricName='CPUUtilization',
+                Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],
+                StartTime=start,
+                EndTime=end,
+                Period=300,
+                Statistics=['Average']
+            )
+            datapoints = metrics.get('Datapoints', [])
+            if datapoints:
+                avg_cpu = datapoints[-1]['Average']
+                print(instance_id, "-", round(avg_cpu, 2), "%")
+
+
+✅ Concept Tested: CloudWatch metrics collection, performance monitoring, boto3 metrics APIs.
+
+🧠 7. Automatically disable inactive IAM users (>90 days)
+
+Question:
+Write a boto3 script to disable inactive IAM users.
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone, timedelta
+
+iam = boto3.client('iam')
+threshold_date = datetime.now(timezone.utc) - timedelta(days=90)
+users = iam.list_users()['Users']
+
+for user in users:
+    if 'PasswordLastUsed' in user:
+        if user['PasswordLastUsed'] < threshold_date:
+            iam.delete_login_profile(UserName=user['UserName'])
+            print("Disabled user:", user['UserName'])
