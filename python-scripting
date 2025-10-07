@@ -186,4 +186,284 @@ for user in users:
     if 'PasswordLastUsed' in user:
         if user['PasswordLastUsed'] < threshold_date:
             iam.delete_login_profile(UserName=user['UserName'])
-            print("Disabled user:", user['UserName'])
+            print("Disabled user:", user['UserName']) 
+
+
+
+###########################################################################
+
+
+
+🧩 1. List all EC2 instances and their public IPs
+
+Question:
+Write a Python script using boto3 that lists all EC2 instances along with their Instance ID, State, and Public IP address.
+
+What it tests: EC2 basics, describe_instances(), JSON parsing.
+
+Answer:
+
+import boto3
+
+ec2 = boto3.client('ec2')
+
+response = ec2.describe_instances()
+
+print("EC2 Instance Details:")
+for reservation in response['Reservations']:
+    for instance in reservation['Instances']:
+        print(f"ID: {instance['InstanceId']}, State: {instance['State']['Name']}, IP: {instance.get('PublicIpAddress', 'N/A')}")
+
+
+Output Example:
+
+ID: i-023abcd4567ef, State: running, IP: 18.221.35.210
+ID: i-091xyz9988gh, State: stopped, IP: N/A
+
+🧩 2. Stop all EC2 instances with a specific tag
+
+Question:
+Write a Python script to stop all EC2 instances with tag Environment=Dev.
+
+What it tests: Tag filtering, bulk actions, automation safety.
+
+Answer:
+
+import boto3
+
+ec2 = boto3.client('ec2')
+
+response = ec2.describe_instances(
+    Filters=[{'Name': 'tag:Environment', 'Values': ['Dev']}]
+)
+
+instance_ids = [i['InstanceId'] for r in response['Reservations'] for i in r['Instances']]
+
+if instance_ids:
+    ec2.stop_instances(InstanceIds=instance_ids)
+    print("Stopped instances:", instance_ids)
+else:
+    print("No instances found with tag Environment=Dev")
+
+🧩 3. Find IAM users who haven’t logged in for 90 days
+
+Question:
+Write a script that prints IAM users who haven’t logged in for 90 days.
+
+What it tests: IAM, datetime, account compliance check.
+
+Answer:
+
+import boto3
+from datetime import datetime, timezone, timedelta
+
+iam = boto3.client('iam')
+cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+
+for user in iam.list_users()['Users']:
+    last_login = user.get('PasswordLastUsed')
+    if not last_login or last_login < cutoff:
+        print(f"Inactive User: {user['UserName']}")
+
+🧩 4. Upload a local file to S3 bucket
+
+Question:
+Write a Python script to upload a file report.txt to the S3 bucket my-devops-reports.
+
+What it tests: S3 basics and file handling.
+
+Answer:
+
+import boto3
+
+s3 = boto3.client('s3')
+s3.upload_file('report.txt', 'my-devops-reports', 'report.txt')
+
+print("✅ File uploaded successfully.")
+
+🧩 5. Monitor CPU utilization of EC2 instance (CloudWatch)
+
+Question:
+Write a Python script that fetches average CPU utilization for a given EC2 instance over the last hour.
+
+What it tests: CloudWatch metrics API, monitoring automation.
+
+Answer:
+
+import boto3
+from datetime import datetime, timedelta, timezone
+
+cloudwatch = boto3.client('cloudwatch')
+instance_id = 'i-0abc123def456gh'
+
+end = datetime.now(timezone.utc)
+start = end - timedelta(hours=1)
+
+metrics = cloudwatch.get_metric_statistics(
+    Namespace='AWS/EC2',
+    MetricName='CPUUtilization',
+    Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],
+    StartTime=start,
+    EndTime=end,
+    Period=300,
+    Statistics=['Average']
+)
+
+for dp in metrics['Datapoints']:
+    print(f"Time: {dp['Timestamp']}, Avg CPU: {dp['Average']:.2f}%")
+
+🧩 6. Create a new IAM user and attach policy
+
+Question:
+Write a Python script to create an IAM user named devops-temp and attach AmazonS3ReadOnlyAccess policy.
+
+What it tests: IAM automation, permissions.
+
+Answer:
+
+import boto3
+
+iam = boto3.client('iam')
+
+iam.create_user(UserName='devops-temp')
+iam.attach_user_policy(
+    UserName='devops-temp',
+    PolicyArn='arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+)
+
+print("✅ Created user and attached S3 read-only policy.")
+
+🧩 7. List S3 buckets that have no objects (empty buckets)
+
+Question:
+Write a boto3 script to find and print empty S3 buckets.
+
+What it tests: Pagination, object listing, S3 management.
+
+Answer:
+
+import boto3
+
+s3 = boto3.client('s3')
+buckets = s3.list_buckets()['Buckets']
+
+for b in buckets:
+    name = b['Name']
+    objs = s3.list_objects_v2(Bucket=name)
+    if 'Contents' not in objs:
+        print(f"Empty bucket: {name}")
+
+🧩 8. Count number of EC2 instances in each region
+
+Question:
+Write a Python script that lists how many EC2 instances are running in each AWS region.
+
+What it tests: Regional automation, boto3 sessions.
+
+Answer:
+
+import boto3
+
+regions = [r['RegionName'] for r in boto3.client('ec2').describe_regions()['Regions']]
+
+for region in regions:
+    ec2 = boto3.client('ec2', region_name=region)
+    response = ec2.describe_instances()
+    count = sum(len(r['Instances']) for r in response['Reservations'])
+    print(region, ":", count, "instances")
+
+🧩 9. Delete unattached EBS volumes
+
+Question:
+Write a Python script to find and delete all unattached (available) EBS volumes.
+
+What it tests: EBS automation, cost optimization.
+
+Answer:
+
+import boto3
+
+ec2 = boto3.client('ec2')
+volumes = ec2.describe_volumes(Filters=[{'Name': 'status', 'Values': ['available']}])
+
+for v in volumes['Volumes']:
+    print("Deleting unused volume:", v['VolumeId'])
+    ec2.delete_volume(VolumeId=v['VolumeId'])
+
+🧩 10. Send alert if any EC2 instance has CPU > 80%
+
+Question:
+Write a Python script that checks all running EC2 instances and sends an alert (print or email) if CPU > 80%.
+
+What it tests: Monitoring + automation logic.
+
+Answer:
+
+import boto3
+from datetime import datetime, timedelta, timezone
+
+cloudwatch = boto3.client('cloudwatch')
+ec2 = boto3.client('ec2')
+
+instances = ec2.describe_instances()
+end = datetime.now(timezone.utc)
+start = end - timedelta(minutes=30)
+
+for reservation in instances['Reservations']:
+    for instance in reservation['Instances']:
+        if instance['State']['Name'] == 'running':
+            instance_id = instance['InstanceId']
+            metrics = cloudwatch.get_metric_statistics(
+                Namespace='AWS/EC2',
+                MetricName='CPUUtilization',
+                Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],
+                StartTime=start,
+                EndTime=end,
+                Period=300,
+                Statistics=['Average']
+            )
+            if metrics['Datapoints']:
+                avg_cpu = metrics['Datapoints'][-1]['Average']
+                if avg_cpu > 80:
+                    print(f"🚨 High CPU: {instance_id} - {avg_cpu:.2f}%")
+
+💡 Pro Tip:
+
+In Python DevOps rounds, they often ask you to:
+
+Modify these scripts live (e.g., “Add email alert” or “Use SNS instead of print”)
+
+Add error handling (try/except)
+
+Parameterize (pass bucket/region as argument)
+
+Use boto3.resource instead of boto3.client
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
