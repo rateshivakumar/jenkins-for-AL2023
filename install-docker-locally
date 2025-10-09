@@ -1,0 +1,144 @@
+🐳 Complete Docker Setup & Verification Guide (Windows PowerShell)
+1️⃣ Check your Windows version
+
+Docker Desktop requires Windows 10/11 (build 1903 or later).
+
+winver
+
+
+If it’s 1903+ → ✅ proceed.
+
+2️⃣ Enable WSL2 (Windows Subsystem for Linux 2)
+
+Run PowerShell as Administrator and execute:
+
+wsl --install
+
+
+If this fails on older Windows builds:
+
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+
+
+Then restart your system.
+
+3️⃣ Download & Install Docker Desktop
+
+Go to:
+🔗 https://www.docker.com/products/docker-desktop/
+
+Download Docker Desktop for Windows
+
+Run the installer
+
+✅ Check “Use WSL 2 instead of Hyper-V”
+
+✅ Check “Add shortcut to desktop” (optional)
+
+Click OK / Install, wait for setup
+
+Reboot when prompted
+
+4️⃣ Start Docker Desktop
+
+Open Docker Desktop from Start Menu
+
+Wait until the whale 🐳 icon in the system tray says:
+“Docker Desktop is running”
+
+5️⃣ Verify installation
+
+Open PowerShell and run:
+
+docker --version
+docker compose version
+
+
+✅ Example output:
+
+Docker version 28.4.0, build d8eb465
+Docker Compose version v2.39.4-desktop.1
+
+6️⃣ Test Docker Engine
+
+Run the test container:
+
+docker run hello-world
+
+
+✅ Expected output:
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+
+This confirms Docker Engine + Daemon + Networking are all working.
+
+7️⃣ Run a sample Nginx container
+
+Now test a real web service:
+
+docker run -d -p 8080:80 nginx
+
+
+✅ Output (example):
+
+Unable to find image 'nginx:latest' locally
+latest: Pulling from library/nginx
+...
+Status: Downloaded newer image for nginx:latest
+dcfb1cf54043...
+
+8️⃣ Verify container is running
+docker ps
+
+
+✅ Example:
+
+CONTAINER ID   IMAGE     COMMAND                  STATUS         PORTS                  NAMES
+dcfb1cf54043   nginx     "/docker-entrypoint.…"   Up 2 minutes   0.0.0.0:8080->80/tcp   nginx
+
+9️⃣ Access in your browser
+
+Open:
+👉 http://localhost:8080
+
+You’ll see:
+
+Welcome to nginx!
+“If you see this page, the nginx web server is successfully installed and working...”
+
+🎉 That means your Docker setup works perfectly!
+
+🔟 Optional commands
+
+Stop the container:
+
+docker stop dcfb1cf54043
+
+
+Remove the container:
+
+docker rm dcfb1cf54043
+
+
+View all images:
+
+docker images
+
+
+Clean unused containers & images:
+
+docker system prune -a
+
+
+✅ You’ve successfully:
+
+Installed Docker Desktop
+
+Verified Docker Engine and Compose
+
+Pulled and ran containers
+
+Accessed an app via localhost
