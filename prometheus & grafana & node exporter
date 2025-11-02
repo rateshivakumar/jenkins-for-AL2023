@@ -144,3 +144,22 @@ echo "------------------------------------------------"
 
 --------------------------------------
 sudo vim /etc/prometheus/prometheus.yml
+
+
+###########################################################################################
+
+# Prometheus, Grafana, and Node Exporter setup (simple explanation):
+
+# First, I installed Node Exporter on the target server to collect system metrics.
+
+# Then, I set up another server and installed Prometheus and Grafana on it.
+
+# I accessed them using their default ports — Prometheus on 9090, Grafana on 3000, and Node Exporter on 9100.
+
+# In Prometheus, I opened the configuration file (prometheus.yml) and added the Node Exporter server’s IP and port under the targets section.
+
+# After saving and restarting Prometheus, I checked Prometheus targets at http://<Prometheus-IP>:9090/targets to confirm metrics were being scraped.
+
+# Next, I logged into Grafana, added Prometheus as a data source using its URL.
+
+# Finally, I imported the Node Exporter dashboard (ID: 1860) in Grafana, and started viewing all server metrics like CPU, memory, and disk usage.
