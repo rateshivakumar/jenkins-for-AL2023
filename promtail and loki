@@ -1,0 +1,344 @@
+Great — below is a simple, literal, every-step guide that will take your app-server logs into Loki and let you view them in Grafana on your monitoring server. I’ll assume both servers run a Debian/Ubuntu flavor (adjust package manager commands for RHEL/CentOS). Do everything now — I’ll not ask anything back; just follow the steps and replace the placeholders I show.
+
+Important placeholders you must replace:
+
+<MONITORING_IP> → IP or hostname of the monitoring server (where Grafana & Prometheus live).
+
+<APP_LOG_GLOB> → path glob for your app logs (example: /opt/myapp/logs/*.log).
+
+<PROMTAIL_VERSION> → I use 2.8.2 in examples — you can use the matching Loki version.
+
+1) Quick plan (one-line)
+
+Install Loki on monitoring server (docker-compose) → listens on port 3100.
+
+Install Promtail on app server (systemd service) → point it to Loki.
+
+Open firewall/allow 3100/TCP.
+
+Add Loki datasource in Grafana and query logs.
+
+2) On the Monitoring Server — install Loki (simple Docker Compose)
+
+SSH into monitoring server:
+
+ssh user@<MONITORING_IP>
+
+
+Create a folder and files, then open an editor:
+
+mkdir -p ~/loki && cd ~/loki
+
+
+Create docker-compose.yml (paste exactly):
+
+version: '3.7'
+services:
+  loki:
+    image: grafana/loki:2.8.2
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - ./loki-data:/loki
+    restart: unless-stopped
+
+
+Save as docker-compose.yml.
+
+Create loki-config.yaml (paste exactly):
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+ingester:
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+
+schema_config:
+  configs:
+  - from: 2020-10-15
+    store: boltdb-shipper
+    object_store: filesystem
+    schema: v11
+    index:
+      prefix: index_
+      period: 24h
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
+    shared_store: filesystem
+  filesystem:
+    directory: /loki/chunks
+
+limits_config:
+  enforce_metric_name: false
+  max_streams_per_user: 10000
+
+
+Save as loki-config.yaml.
+
+Start Loki:
+
+docker compose up -d
+
+
+Check Loki is running:
+
+docker compose ps
+docker logs -f loki    # Ctrl+C to stop viewing
+
+
+Quick health check (from monitoring server):
+
+curl -sS http://localhost:3100/ready && echo "Loki ready" || echo "Loki not ready"
+
+
+If it prints Loki ready you're good.
+
+3) Open firewall / allow Promtail → Loki (port 3100)
+
+(Make sure app server(s) can reach monitoring server on 3100)
+
+On monitoring server (ufw example):
+
+sudo ufw allow 3100/tcp
+sudo ufw reload
+
+
+Or with iptables / cloud security group: allow <APP_SERVER_IP> -> <MONITORING_IP>:3100 TCP.
+
+Test connectivity from app server (do this later after Promtail install too):
+
+# from app server
+curl -v http://<MONITORING_IP>:3100/ready
+
+
+You should see a positive response.
+
+4) On the App Server — install Promtail (binary + systemd method)
+
+SSH to app server:
+
+ssh user@<APP_SERVER_IP>
+
+
+Create directories:
+
+sudo mkdir -p /etc/promtail /var/lib/promtail
+sudo chown $(whoami) /etc/promtail /var/lib/promtail
+
+
+Download Promtail (example uses v2.8.2 — match Loki's version):
+
+PROMTAIL_VERSION="2.8.2"
+cd /tmp
+wget https://github.com/grafana/loki/releases/download/v${PROMTAIL_VERSION}/promtail-linux-amd64.zip -O promtail.zip
+unzip promtail.zip
+sudo mv promtail-linux-amd64 /usr/local/bin/promtail
+sudo chmod +x /usr/local/bin/promtail
+
+
+If URL format changes, download the promtail-linux-amd64 binary from the Loki/Grafana release page.
+
+Create Promtail config /etc/promtail/promtail-local-config.yaml — paste and edit:
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://<MONITORING_IP>:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+
+  - job_name: app_logs
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: myapp
+          __path__: <APP_LOG_GLOB>
+
+  - job_name: docker
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+
+relabel_configs:
+  - source_labels: ['__address__']
+    target_label: instance
+    replacement: '${HOSTNAME}'
+
+
+Replace <MONITORING_IP> and <APP_LOG_GLOB> (e.g. /opt/myapp/logs/*.log) with your values.
+
+Create systemd service /etc/systemd/system/promtail.service:
+
+[Unit]
+Description=Promtail service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/promtail -config.file=/etc/promtail/promtail-local-config.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+
+Enable and start Promtail:
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now promtail
+sudo systemctl status promtail --no-pager
+
+
+Tail promtail logs:
+
+sudo journalctl -u promtail -f
+
+
+You should see lines showing Promtail started and attempts to push to Loki.
+
+5) Verify logs are arriving in Loki
+
+From monitoring server:
+
+# check Loki push ingester logs
+docker logs loki | tail -n 50
+
+
+From app server (quick curl test to confirm Loki is reachable):
+
+curl -sS http://<MONITORING_IP>:3100/metrics | head -n 5
+# OR health
+curl -sS http://<MONITORING_IP>:3100/ready && echo "ok"
+
+
+Check Promtail logs for successful HTTP POSTs to Loki:
+
+sudo journalctl -u promtail | grep -i "level=info" | tail -n 50
+
+
+Promtail will log any push errors (connection refused, auth error etc.). Fix accordingly.
+
+6) Add Loki as a Grafana datasource
+Option A — Grafana UI (manual)
+
+Open Grafana in browser (example http://<MONITORING_IP>:3000).
+
+Login (default admin/admin unless changed).
+
+Left menu → Configuration → Data Sources → Add data source → choose Loki.
+
+Set URL to http://<MONITORING_IP>:3100/ and Save & Test. It should say "Data source is working".
+
+Option B — Add datasource by file provisioning (automated)
+
+Create /etc/grafana/provisioning/datasources/loki.yaml (if you have access):
+
+apiVersion: 1
+providers:
+  - name: 'Loki'
+    orgId: 1
+    folder: ''
+    type: loki
+    access: proxy
+    url: http://<MONITORING_IP>:3100
+    editable: true
+    isDefault: false
+
+
+Restart Grafana if you add provisioning files.
+
+7) Explore logs in Grafana
+
+In Grafana → Explore → choose Loki datasource.
+
+Try queries:
+
+All logs with job label: {job="myapp"}
+
+Lines containing ERROR: {job="myapp"} |= "ERROR"
+
+JSON parsing: {job="myapp"} | json | level="error"
+
+Create a dashboard:
+
+Add a Logs panel or Loki query panel and paste your query.
+
+8) Troubleshooting — common issues & fixes
+
+Promtail can't connect (connection refused)
+
+Check firewall and that Loki listens on 3100.
+
+curl http://<MONITORING_IP>:3100/ready from app server.
+
+No logs in Grafana
+
+Confirm Promtail tailing correct path (__path__).
+
+Check /var/lib/promtail/positions.yaml to ensure Promtail progressed.
+
+Use Promtail logs: sudo journalctl -u promtail -e.
+
+Large cardinality or many labels
+
+Remove dynamic fields from relabel_configs. Labels should be low-cardinality (job, env, host).
+
+Docker container logs unreadable
+
+Promtail reads Docker json logs at /var/lib/docker/containers/*/*.log. Ensure Promtail has permission (run as root or allow reading files).
+
+Loki storage / retention
+
+Current config uses local filesystem — for production use S3/GCS or more advanced config.
+
+9) Minimal end-to-end checklist (execute in order)
+
+On monitoring: create folder, add docker-compose.yml & loki-config.yaml.
+
+On monitoring: docker compose up -d → curl http://localhost:3100/ready.
+
+On monitoring: open firewall port 3100.
+
+On app server: download promtail binary → place /usr/local/bin/promtail.
+
+On app server: create /etc/promtail/promtail-local-config.yaml (set <MONITORING_IP> & <APP_LOG_GLOB>).
+
+On app server: create systemd file and systemctl enable --now promtail.
+
+On monitoring: add Loki datasource in Grafana.
+
+In Grafana Explore: query by {job="myapp"}.
+
+10) If you'd like I can (pick one; I’ll produce it right here):
+
+A ready-to-run docker-compose.yml that runs Prometheus + Grafana + Loki together.
+
+A promtail config prefilled if you paste your exact app log path(s) and whether logs are JSON/plaintext.
+
+A simple Grafana dashboard JSON that shows a log panel and a metric panel correlated (needs Prometheus metric names).
