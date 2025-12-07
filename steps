@@ -1,4 +1,4 @@
-//
+
 //
 Perfect 💯 — you’ve written a nice Jenkins declarative pipeline that covers Checkout → Install → SonarQube → Package → Nexus → DockerHub.
 Let’s go step by step (like you’d explain in an interview or configure in real life). I’ll break this into:
